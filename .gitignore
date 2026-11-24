@@ -8,3 +8,4 @@ results/*/predictions.csv.gz
 results/*/consensus_kg.jsonl.gz
 
 docs/
+notebooks/

@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
 from dataclasses import asdict, replace
 from importlib.metadata import version
 from pathlib import Path
@@ -138,13 +139,18 @@ def _evaluate_graph(model, config, indices, validation, test, inputs, sequences,
 
 def _run_fold(fold, test, validation, sequences, args, settings, figure_name, device):
     torch.set_num_threads(args.threads)
+    if device.type == "cuda" and device.index is None and torch.cuda.device_count() > 1:
+        # Spread folds over all visible GPUs: fold k runs on cuda:(k - 1) mod count.
+        device = torch.device("cuda", (fold - 1) % torch.cuda.device_count())
+    if device.type == "cuda":
+        torch.cuda.set_device(device)
     training = np.setdiff1d(np.arange(len(sequences)), np.union1d(test, validation)).tolist()
     test, validation = list(map(int, test)), list(map(int, validation))
     groups = [sequence.group for sequence in sequences]
     split_rows = [{"fold": fold, "role": role, "sequence": sequences[i].name, "group": groups[i]}
                   for role, members in (("train", training), ("validation", validation), ("test", test))
                   for i in members]
-    print(f"Fold {fold}/{args.folds} | training {len(training)} sequences | "
+    print(f"Fold {fold}/{args.folds} | {device} | training {len(training)} sequences | "
           f"validation {len(validation)} | testing {len(test)}", flush=True)
     seed = args.seed + fold
     torch.manual_seed(seed)
@@ -225,7 +231,9 @@ def run(args):
     jobs = [(fold, test, test_folds[fold % len(test_folds)], sequences, args, settings, figure_name, device)
             for fold, test in enumerate(test_folds, 1)]
     if args.jobs > 1:
-        with ProcessPoolExecutor(max_workers=min(args.jobs, len(jobs))) as pool:
+        # CUDA cannot be used in forked workers (the Linux default), so always spawn.
+        context = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=min(args.jobs, len(jobs)), mp_context=context) as pool:
             folds = list(pool.map(_run_fold, *zip(*jobs)))
     else:
         folds = [_run_fold(*job) for job in jobs]
@@ -365,7 +373,8 @@ def _write_run(output, args, settings, device, table, traces, latency):
     write_json(output / "run.json", {
         "protocol": "grouped out-of-fold test with disjoint validation for threshold selection",
         "parameters": run_parameters, "negotiation": asdict(settings),
-        "device": torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU",
+        "device": ([torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
+                   if device.type == "cuda" else "CPU"),
         "package_versions": {name: version(name) for name in ("numpy", "pandas", "scipy", "torch", "scikit-learn", "matplotlib")},
         "dataset_source": pd.read_json(provenance, typ="series").to_dict() if provenance.exists() else None,
         "dataset": {"sequences": len(table), "samples": int(table["samples"].sum()),
