@@ -1,7 +1,0 @@
-feature,NSNG Energy,AutoGen,MetaGPT,source
-Specific to anomaly detection,Yes,No,No,Paper Table VI (qualitative; no matched benchmark)
-Convergence guarantee claimed in the paper,Yes,No,No,Paper Table VI (qualitative; no matched benchmark)
-Trust propagation,Yes,No,No,Paper Table VI (qualitative; no matched benchmark)
-Interpretable decision trace,Yes,Partial,Partial,Paper Table VI (qualitative; no matched benchmark)
-Latency quoted in the paper (ms/sample),0.5,500–2000,500–2000,Paper Table VI (qualitative; no matched benchmark)
-F1 quoted in the paper on Power Anomaly,0.238,N/A,N/A,Paper Table VI (qualitative; no matched benchmark)
