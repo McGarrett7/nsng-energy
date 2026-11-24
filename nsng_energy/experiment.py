@@ -47,7 +47,7 @@ def _fit_negotiator(settings, indices, training, sequences, inputs, args, seed):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
     target = torch.zeros(batch.valid.shape, device=device)
     for row, i in enumerate(training):
-        target[row, :len(sequences[i].labels)] = torch.tensor(np.array(sequences[i].labels), dtype=torch.float32)
+        target[row, :len(sequences[i].labels)] = torch.tensor(np.array(sequences[i].labels), dtype=torch.float32, device=device)
     samples, positives = batch.valid.sum().item(), target.sum().item()
     if not 0 < positives < samples:
         raise ValueError("Each training split requires both classes for fitting graph attention.")
@@ -139,6 +139,9 @@ def _evaluate_graph(model, config, indices, validation, test, inputs, sequences,
 
 def _run_fold(fold, test, validation, sequences, args, settings, figure_name, device):
     torch.set_num_threads(args.threads)
+    # Spawned workers do not inherit these flags from the parent process.
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
     if device.type == "cuda" and device.index is None and torch.cuda.device_count() > 1:
         # Spread folds over all visible GPUs: fold k runs on cuda:(k - 1) mod count.
         device = torch.device("cuda", (fold - 1) % torch.cuda.device_count())
