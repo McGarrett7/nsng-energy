@@ -38,9 +38,28 @@ def _batch(inputs, members, indices):
     return batch if indices == ALL_AGENTS else batch.select_agents(indices)
 
 
-def _fit_negotiator(settings, indices, training, sequences, inputs, args, seed):
-    """Truncated backpropagation through time over the training sequences in parallel."""
+@torch.no_grad()
+def _chunk_states(model, batch, chunk_size):
+    """Carried state (trust, R2 history) at the start of every chunk under the current parameters."""
+    training = model.training
+    model.eval()
+    states, state = {}, None
+    for start in range(0, batch.score.shape[1], chunk_size):
+        states[start] = state
+        state = model(batch.take(slice(start, start + chunk_size)), state=state)[3]
+    model.train(training)
+    return states
+
+
+def _fit_negotiator(settings, indices, training, sequences, inputs, args, seed, shuffle=True):
+    """Truncated backpropagation through time over the training sequences in parallel.
+
+    With ``shuffle`` the chunks of an epoch are visited in random order. Each chunk starts
+    from the trust state reached at its first time step, recomputed once per epoch, so
+    Eq. (9) still carries trust through time while gradient steps are decorrelated.
+    """
     torch.manual_seed(seed)
+    rng = np.random.default_rng(seed)
     batch = _batch(inputs, training, indices)
     device = batch.score.device
     model = Negotiator(settings).to(device)
@@ -53,11 +72,15 @@ def _fit_negotiator(settings, indices, training, sequences, inputs, args, seed):
         raise ValueError("Each training split requires both classes for fitting graph attention.")
     positive_weight = (samples - positives) / positives
     model.train()
+    starts = np.arange(0, target.shape[1], args.chunk_size)
     for _ in range(args.graph_epochs):
         state = None
-        for start in range(0, target.shape[1], args.chunk_size):
+        carried = _chunk_states(model, batch, args.chunk_size) if shuffle else None
+        for start in (rng.permutation(starts) if shuffle else starts):
             window = slice(start, start + args.chunk_size)
             chunk = batch.take(window)
+            if shuffle:
+                state = carried[start]
             optimizer.zero_grad()
             scores, confidence, _, state = model(chunk, state=state)
             mask, y = chunk.valid.float(), target[:, window]
@@ -68,6 +91,7 @@ def _fit_negotiator(settings, indices, training, sequences, inputs, args, seed):
             calibration = nn.functional.binary_cross_entropy(confidence, correctness, reduction="none")
             loss = loss + 0.1 * (calibration * mask).sum() / count
             loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             state = state.detach()
     return model.eval()

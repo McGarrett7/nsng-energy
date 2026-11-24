@@ -7,7 +7,7 @@ Anomaly detection on dryer power consumption using multiple detector agents comb
 | Area | Technology | Used for |
 | --- | --- | --- |
 | Language, packaging | Python ≥ 3.11, setuptools (`pyproject.toml`) | Package install, `nsng-energy` entry point |
-| Deep learning | PyTorch (CPU/CUDA) | LSTM autoencoder, multi-head Graph Attention Network, truncated BPTT training |
+| Deep learning | PyTorch (CPU/CUDA) | LSTM autoencoder, multi-head Graph Attention Network, truncated BPTT training (chunks in random order from carried trust states, gradient clipping 1.0) |
 | Machine learning | scikit-learn | Isolation Forest, One-Class SVM, LOF, `StandardScaler`, `GroupKFold`, ROC-AUC |
 | Numerics | NumPy, SciPy | Sliding-window features, sigmoid (`expit`), EMA (`lfilter`) |
 | Data handling | pandas | Reading sequence CSVs and manifests, result tables |
@@ -58,7 +58,7 @@ The manifest CSV has columns `sequence,path,group`, with optional `fault,normal_
 - `normal_path`: extra normal-operation data for training the detectors.
 - `figure=1`: the sequence plotted in `figure_1.png`.
 
-## Code structure
+<!-- ## Code structure
 
 | Module | Role |
 | --- | --- |
@@ -70,7 +70,7 @@ The manifest CSV has columns `sequence,path,group`, with optional `fault,normal_
 | [`evaluation.py`](nsng_energy/evaluation.py) | Validation threshold selection, metrics, paired permutation test |
 | [`artifacts.py`](nsng_energy/artifacts.py) | Exports the dataset table, Figure 1, consensus knowledge graph, and traces |
 | [`paper.py`](nsng_energy/paper.py) | Reference numbers used in the comparison table |
-| [`tests/`](tests/test_negotiation.py) | Unit tests for consensus, edge matrix, and trust |
+| [`tests/`](tests/test_negotiation.py) | Unit tests for consensus, edge matrix, and trust | -->
 
 ## Outputs
 
