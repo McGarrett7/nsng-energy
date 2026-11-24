@@ -1,0 +1,10 @@
+.work/
+.venv/
+__pycache__/
+*.egg-info/
+data/
+results/*/traces/
+results/*/predictions.csv.gz
+results/*/consensus_kg.jsonl.gz
+
+docs/

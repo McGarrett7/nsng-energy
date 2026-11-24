@@ -1,0 +1,1 @@
+"""NSNG-Energy dryer benchmark."""
