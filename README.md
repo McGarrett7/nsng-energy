@@ -88,7 +88,8 @@ Written to `results/public-dryer/` by default:
 | `run.json` | Parameters, library versions, data source, inference time |
 | `predictions.csv.gz` | Per-observation predictions |
 | `consensus_kg.jsonl.gz` | Per observation: score, confidence, prediction, rounds, conflict counts, final trust |
-| `traces/*.npz` | Per-round state: `states`, `outgoing`, `conflict_edges`, `rule_hits`, `rounds` |
+| `traces/*.npz` | Per-round state: `states`, `outgoing`, `conflict_edges`, `rule_hits`, `rounds |
+
 
 ## Data
 
