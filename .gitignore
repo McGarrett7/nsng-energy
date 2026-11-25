@@ -10,3 +10,4 @@ results/*/consensus_kg.jsonl.gz
 docs/
 notebooks/
 results/public-dryer-residual/
+modal_app.py
