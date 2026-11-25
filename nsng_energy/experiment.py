@@ -198,6 +198,9 @@ def _run_fold(fold, test, validation, sequences, args, settings, figure_name, de
         # Spread folds over all visible GPUs: fold k runs on cuda:(k - 1) mod count.
         device = torch.device("cuda", (fold - 1) % torch.cuda.device_count())
     if device.type == "cuda":
+        if device.index is None:
+            # Recent PyTorch rejects set_device("cuda") without an index (single-GPU hosts).
+            device = torch.device("cuda", 0)
         torch.cuda.set_device(device)
     training = np.setdiff1d(np.arange(len(sequences)), np.union1d(test, validation)).tolist()
     test, validation = list(map(int, test)), list(map(int, validation))
