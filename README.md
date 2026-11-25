@@ -45,7 +45,9 @@ Run tests:
 | `run --jobs N` | Run N folds in parallel (measured inference time is affected by CPU contention) |
 | `run --folds N` | Number of folds (default 5) |
 | `run --manifest <csv> --output <dir>` | Use your own data |
-| `run --seed`, `--window`, `--lstm-epochs`, `--graph-epochs`, `--chunk-size` | Seed (42), window (24), LSTM epochs (8), GAT epochs (4), truncated BPTT length (32) |
+| `run --seed`, `--window`, `--lstm-epochs`, `--graph-epochs`, `--chunk-size` | Seed (42), window (24), LSTM epochs (8), maximum GAT epochs (8), truncated BPTT length (32) |
+| `run --patience N` | Early stopping: keep the GAT epoch with the best validation ROC-AUC, stop after N epochs without gain (3) |
+| `run --extra-seeds 43 44 …` | Repeat Table III with these seeds; writes mean, std and 95% CI |
 | `run --nominal-voltage <V>` `--voltage-rule soft\|hard` | Enable voltage rule R1 when the data has a `voltage` column |
 | `run --detector-residual w` | Add `w·logit` of the initial detector score to the prediction layer |
 
@@ -86,6 +88,8 @@ Written to `results/public-dryer/` by default:
 | `paired_significance.json` | Statistical tests |
 | `paper_comparison.csv`, `table_vi_qualitative.csv` | Comparison against reference numbers |
 | `run.json` | Parameters, library versions, data source, inference time |
+| `training_history.csv` | Validation ROC-AUC per GAT epoch and the selected epoch |
+| `seeds_table_iii.csv`, `seeds_summary.csv`, `seeds_folds.csv` | Table III per seed; mean, std, 95% CI; NSNG per-fold F1, AUC, score range |
 | `predictions.csv.gz` | Per-observation predictions |
 | `consensus_kg.jsonl.gz` | Per observation: score, confidence, prediction, rounds, conflict counts, final trust |
 

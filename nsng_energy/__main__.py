@@ -27,7 +27,12 @@ def main() -> None:
     run.add_argument("--threads", type=positive_int, default=2)
     run.add_argument("--window", type=positive_int, default=24)
     run.add_argument("--lstm-epochs", type=positive_int, default=8)
-    run.add_argument("--graph-epochs", type=positive_int, default=4)
+    run.add_argument("--graph-epochs", type=positive_int, default=8,
+                     help="Maximum epochs for the graph; the epoch with the best validation ROC-AUC is kept.")
+    run.add_argument("--patience", type=positive_int, default=3,
+                     help="Stop fitting the graph after this many epochs without validation ROC-AUC gain.")
+    run.add_argument("--extra-seeds", type=int, nargs="*", default=[],
+                     help="Repeat Table III (main model, baselines, agents) with these seeds for mean/std/95%% CI.")
     run.add_argument("--chunk-size", type=positive_int, default=32,
                      help="Time steps per truncated backpropagation window when fitting the graph.")
     run.add_argument("--jobs", type=positive_int, default=1, help="Folds evaluated in parallel processes.")

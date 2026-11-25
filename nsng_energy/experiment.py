@@ -18,7 +18,8 @@ from . import paper
 from .agents import Agents, NAMES
 from .artifacts import export_consensus, export_trace, inventory, plot_detection, write_json
 from .data import load_manifest
-from .evaluation import choose_threshold, paired_group_test, summarize, threshold_grid
+from .evaluation import (choose_threshold, classification, counts, paired_group_test, roc_auc, summarize,
+                         threshold_grid)
 from .negotiation import GraphInputs, Negotiator, Settings, graph_inputs
 
 FULL = "NSNG Energy"
@@ -51,15 +52,29 @@ def _chunk_states(model, batch, chunk_size):
     return states
 
 
-def _fit_negotiator(settings, indices, training, sequences, inputs, args, seed, shuffle=True):
+@torch.no_grad()
+def _validation_auc(model, batch, labels):
+    model.eval()
+    scores = model(batch)[0][batch.valid].cpu().numpy()
+    model.train()
+    return roc_auc(labels, scores)
+
+
+def _fit_negotiator(settings, indices, training, validation, sequences, inputs, args, seed, shuffle=True):
     """Truncated backpropagation through time over the training sequences in parallel.
 
     With ``shuffle`` the chunks of an epoch are visited in random order. Each chunk starts
     from the trust state reached at its first time step, recomputed once per epoch, so
     Eq. (9) still carries trust through time while gradient steps are decorrelated.
+
+    After every epoch the consensus ROC-AUC on the validation sequences is measured; the
+    parameters of the best epoch are kept and training stops after ``args.patience``
+    epochs without improvement. Returns the model and the per-epoch validation AUC.
     """
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
+    held_out = _batch(inputs, validation, indices)
+    held_out_labels = np.concatenate([sequences[i].labels for i in validation])
     batch = _batch(inputs, training, indices)
     device = batch.score.device
     model = Negotiator(settings).to(device)
@@ -73,6 +88,7 @@ def _fit_negotiator(settings, indices, training, sequences, inputs, args, seed, 
     positive_weight = (samples - positives) / positives
     model.train()
     starts = np.arange(0, target.shape[1], args.chunk_size)
+    history, best_auc, best_parameters, stale = [], -np.inf, None, 0
     for _ in range(args.graph_epochs):
         state = None
         carried = _chunk_states(model, batch, args.chunk_size) if shuffle else None
@@ -94,7 +110,18 @@ def _fit_negotiator(settings, indices, training, sequences, inputs, args, seed, 
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             state = state.detach()
-    return model.eval()
+        auc = _validation_auc(model, held_out, held_out_labels)
+        history.append(auc)
+        if auc > best_auc:  # NaN never improves, so the first finite epoch wins
+            best_auc, stale = auc, 0
+            best_parameters = {key: value.detach().clone() for key, value in model.state_dict().items()}
+        else:
+            stale += 1
+            if stale >= args.patience:
+                break
+    if best_parameters is not None:
+        model.load_state_dict(best_parameters)
+    return model.eval(), history
 
 
 def variants(settings):
@@ -161,7 +188,8 @@ def _evaluate_graph(model, config, indices, validation, test, inputs, sequences,
     return frames, {i: detail for i, (_, _, detail) in zip(test, test_results)}
 
 
-def _run_fold(fold, test, validation, sequences, args, settings, figure_name, device):
+def _run_fold(fold, test, validation, sequences, args, settings, figure_name, device, base_seed, studies):
+    """Fit and evaluate one fold. ``studies`` adds ablations, sensitivity and traces."""
     torch.set_num_threads(args.threads)
     # Spawned workers do not inherit these flags from the parent process.
     torch.backends.cudnn.benchmark = False
@@ -177,9 +205,9 @@ def _run_fold(fold, test, validation, sequences, args, settings, figure_name, de
     split_rows = [{"fold": fold, "role": role, "sequence": sequences[i].name, "group": groups[i]}
                   for role, members in (("train", training), ("validation", validation), ("test", test))
                   for i in members]
-    print(f"Fold {fold}/{args.folds} | {device} | training {len(training)} sequences | "
+    print(f"Seed {base_seed} | fold {fold}/{args.folds} | {device} | training {len(training)} sequences | "
           f"validation {len(validation)} | testing {len(test)}", flush=True)
-    seed = args.seed + fold
+    seed = base_seed + fold
     torch.manual_seed(seed)
     detectors = Agents(seed, device, args.window, args.lstm_epochs)
     detectors.fit(sequences[i] for i in training)
@@ -196,11 +224,24 @@ def _run_fold(fold, test, validation, sequences, args, settings, figure_name, de
                 belief_for_figure = beliefs[i].scores
 
     experiments = defaultdict(list)
-    negotiation_timing = []
-    full = _fit_negotiator(settings, ALL_AGENTS, training, sequences, inputs, args, seed)
+    negotiation_timing, history_rows = [], []
+
+    def fit(config, indices, name):
+        model, history = _fit_negotiator(config, indices, training, validation, sequences, inputs, args, seed)
+        best = int(np.nanargmax(history)) if np.isfinite(history).any() else len(history) - 1
+        history_rows.extend({"seed": base_seed, "fold": fold, "model": name, "epoch": epoch + 1,
+                             "validation_roc_auc": auc, "selected": epoch == best}
+                            for epoch, auc in enumerate(history))
+        print(f"  seed {base_seed} | fold {fold} | {name} | validation AUC per epoch "
+              f"{[round(auc, 3) for auc in history]} -> epoch {best + 1}", flush=True)
+        return model
+
+    full = fit(settings, ALL_AGENTS, FULL)
     predictions, details = _evaluate_graph(
-        full, settings, ALL_AGENTS, validation, test, inputs, sequences, fold, True, negotiation_timing,
+        full, settings, ALL_AGENTS, validation, test, inputs, sequences, fold, studies, negotiation_timing,
     )
+    if not studies:
+        details = {}
     experiments["method", FULL].extend(predictions)
 
     validation_labels = np.concatenate([sequences[i].labels for i in validation])
@@ -216,22 +257,18 @@ def _run_fold(fold, test, validation, sequences, args, settings, figure_name, de
         threshold = choose_threshold(validation_labels, np.concatenate([get_scores(i)[0] for i in validation]))
         experiments["method", name].extend(_frame(sequences[i], fold, *get_scores(i), threshold) for i in test)
 
-    for study, name, config, indices in variants(settings):
+    for study, name, config, indices in (variants(settings) if studies else ()):
         if config == settings and indices == ALL_AGENTS:
             experiments[study, name].extend(predictions)
             continue
-        if study == "component":
-            print(f"  fold {fold} | {name}", flush=True)
-            model = _fit_negotiator(config, indices, training, sequences, inputs, args, seed)
-        else:
-            model = full
+        model = fit(config, indices, name) if study == "component" else full
         result, _ = _evaluate_graph(model, config, indices, validation, test, inputs, sequences, fold, False, [])
         experiments[study, name].extend(result)
-    print(f"Fold {fold} finished", flush=True)
+    print(f"Seed {base_seed} | fold {fold} finished", flush=True)
     return {
         "experiments": dict(experiments), "splits": split_rows, "details": details,
         "negotiation_timing": negotiation_timing, "agent_timing": agent_timing,
-        "belief_for_figure": belief_for_figure,
+        "belief_for_figure": belief_for_figure, "history": history_rows,
     }
 
 
@@ -255,15 +292,25 @@ def run(args):
     output.mkdir(parents=True, exist_ok=True)
     table = inventory(sequences, output)
     test_folds = [test for _, test in GroupKFold(n_splits=args.folds).split(sequences, groups=groups)]
-    jobs = [(fold, test, test_folds[fold % len(test_folds)], sequences, args, settings, figure_name, device)
-            for fold, test in enumerate(test_folds, 1)]
+    # The first seed runs every study; further seeds repeat Table III only. Heavy jobs go first.
+    seeds = list(dict.fromkeys([args.seed, *args.extra_seeds]))
+    jobs = [(fold, test, test_folds[fold % len(test_folds)], sequences, args, settings, figure_name, device,
+             seed, seed == args.seed)
+            for seed in seeds for fold, test in enumerate(test_folds, 1)]
     if args.jobs > 1:
         # CUDA cannot be used in forked workers (the Linux default), so always spawn.
         context = multiprocessing.get_context("spawn")
         with ProcessPoolExecutor(max_workers=min(args.jobs, len(jobs)), mp_context=context) as pool:
-            folds = list(pool.map(_run_fold, *zip(*jobs)))
+            results = list(pool.map(_run_fold, *zip(*jobs)))
     else:
-        folds = [_run_fold(*job) for job in jobs]
+        results = [_run_fold(*job) for job in jobs]
+    by_seed = defaultdict(list)
+    for job, result in zip(jobs, results):
+        by_seed[job[8]].append(result)
+    folds = by_seed[args.seed]
+    pd.DataFrame([row for result in results for row in result["history"]]).to_csv(
+        output / "training_history.csv", index=False)
+    _seed_tables(output, by_seed)
 
     frames_by_experiment = defaultdict(list)
     trace_files, split_rows, negotiation_timing, agent_timing = {}, [], [], []
@@ -290,10 +337,7 @@ def run(args):
     summary = pd.DataFrame(all_summary)
     grid = pd.DataFrame(sweep_rows)
     grid.to_csv(output / "threshold_grid_test.csv", index=False)
-    # Paper protocol (Section V.D): best threshold of the [0.3, 0.7] grid on the test predictions.
-    grid["distance_to_figure_threshold"] = (grid["threshold"].mul(100).round() - 45).abs()
-    oracle = grid.sort_values(["f1", "distance_to_figure_threshold", "threshold"], ascending=[False, True, False])
-    oracle = oracle.drop_duplicates(["study", "name"]).drop(columns="distance_to_figure_threshold")
+    oracle = _best_grid(grid)
     oracle.to_csv(output / "best_test_grid.csv", index=False)
     full_row = summary.query("study == 'method' and name == @FULL").iloc[0]
     summary.query("study == 'method'").drop(columns="study").to_csv(output / "table_iii_methods.csv", index=False)
@@ -318,6 +362,62 @@ def run(args):
     latency = _latency(negotiation_timing, agent_timing, args.jobs)
     _paper_comparison(output / "paper_comparison.csv", summary, oracle, table, figure_metrics, latency)
     _write_run(output, args, settings, device, table, trace_files, latency)
+
+
+def _best_grid(grid):
+    """Paper protocol (Section V.D): best threshold of the [0.3, 0.7] grid on the test predictions."""
+    keys = [key for key in ("study", "name") if key in grid]
+    distance = (grid["threshold"].mul(100).round() - 45).abs()
+    ranked = grid.assign(_distance=distance).sort_values(
+        ["f1", "_distance", "threshold"], ascending=[False, True, False])
+    ranked = ranked.drop_duplicates(keys) if keys else ranked.head(1)
+    return ranked.drop(columns="_distance")
+
+
+SEED_METRICS = ("accuracy", "precision", "recall", "f1", "roc_auc", "macro_f1", "macro_roc_auc")
+
+
+def _seed_tables(output, by_seed):
+    """Table III repeated over seeds: per-seed metrics, mean, std and a 95% t-interval."""
+    from scipy import stats
+
+    rows, fold_rows = [], []
+    for seed, folds in by_seed.items():
+        frames = defaultdict(list)
+        for result in folds:
+            for (study, name), items in result["experiments"].items():
+                if study == "method":
+                    frames[name].extend(items)
+        for name, items in frames.items():
+            metrics, _ = summarize(items)
+            best = _best_grid(pd.DataFrame(threshold_grid(items))).iloc[0]
+            rows.append({"seed": seed, "name": name, **{key: metrics[key] for key in SEED_METRICS},
+                         "best_grid_f1": best["f1"], "best_grid_threshold": best["threshold"]})
+        for fold, frame in pd.concat(frames[FULL]).groupby("fold"):
+            labels = frame["label"].to_numpy()
+            f1 = classification(counts(labels, frame["prediction"].to_numpy()))["f1"]
+            fold_rows.append({"seed": seed, "fold": fold, "threshold": frame["threshold"].iat[0],
+                              "f1": f1, "roc_auc": roc_auc(frame["label"].to_numpy(), frame["score"].to_numpy()),
+                              "score_min": frame["score"].min(), "score_max": frame["score"].max()})
+    per_seed = pd.DataFrame(rows)
+    per_seed.to_csv(output / "seeds_table_iii.csv", index=False)
+    pd.DataFrame(fold_rows).to_csv(output / "seeds_folds.csv", index=False)
+
+    columns = [*SEED_METRICS, "best_grid_f1"]
+    difference = (per_seed[per_seed["name"] == FULL].set_index("seed")[columns]
+                  - per_seed[per_seed["name"] == REFERENCE_METHODS[0]].set_index("seed")[columns])
+    groups = [*per_seed.groupby("name", sort=False),
+              (f"{FULL} minus {REFERENCE_METHODS[0]}", difference.reset_index())]
+    summary = []
+    for name, frame in groups:
+        n = len(frame)
+        for metric in columns:
+            values = frame[metric].astype(float)
+            mean, std = values.mean(), values.std(ddof=1) if n > 1 else np.nan
+            half = stats.t.ppf(0.975, n - 1) * std / np.sqrt(n) if n > 1 else np.nan
+            summary.append({"name": name, "metric": metric, "seeds": n, "mean": mean, "std": std,
+                            "ci95_low": mean - half, "ci95_high": mean + half})
+    pd.DataFrame(summary).to_csv(output / "seeds_summary.csv", index=False)
 
 
 def _qualitative_comparison(path):
