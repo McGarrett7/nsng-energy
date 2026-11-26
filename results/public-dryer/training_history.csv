@@ -1,0 +1,135 @@
+seed,fold,model,epoch,validation_roc_auc,selected
+42,1,NSNG Energy,1,0.9339856902356902,False
+42,1,NSNG Energy,2,0.9412855405910961,True
+42,1,NSNG Energy,3,0.9361906098017209,False
+42,1,NSNG Energy,4,0.9355920314253647,False
+42,1,NSNG Energy,5,0.9281179854096522,False
+42,1,w/o LSTM Agent,1,0.9397832491582492,True
+42,1,w/o LSTM Agent,2,0.9382271791994015,False
+42,1,w/o LSTM Agent,3,0.9381593714927049,False
+42,1,w/o LSTM Agent,4,0.9373807519640852,False
+42,1,w/o Trust Propagation,1,0.9330153385708941,False
+42,1,w/o Trust Propagation,2,0.9397703890759447,True
+42,1,w/o Trust Propagation,3,0.9341704077815189,False
+42,1,w/o Trust Propagation,4,0.9358679386457164,False
+42,1,w/o Trust Propagation,5,0.9359591283202394,False
+42,1,w/o Symbolic Rules,1,0.9339833520389077,False
+42,1,w/o Symbolic Rules,2,0.9399013280957724,True
+42,1,w/o Symbolic Rules,3,0.9360409652076319,False
+42,1,w/o Symbolic Rules,4,0.9350776281331837,False
+42,1,w/o Symbolic Rules,5,0.9350565843621398,False
+42,1,w/o Multi Head Attention,1,0.9401164421997755,False
+42,1,w/o Multi Head Attention,2,0.9197530864197531,False
+42,1,w/o Multi Head Attention,3,0.9449915824915824,False
+42,1,w/o Multi Head Attention,4,0.9504372427983538,True
+42,1,w/o Multi Head Attention,5,0.9408740179573513,False
+42,1,w/o Multi Head Attention,6,0.9331322484100263,False
+42,1,w/o Multi Head Attention,7,0.9468831836887392,False
+42,2,NSNG Energy,1,0.860128630050505,True
+42,2,NSNG Energy,2,0.8343158143939394,False
+42,2,NSNG Energy,3,0.835669191919192,False
+42,2,NSNG Energy,4,0.841919191919192,False
+42,2,w/o LSTM Agent,1,0.5754616477272727,False
+42,2,w/o LSTM Agent,2,0.8738715277777779,True
+42,2,w/o LSTM Agent,3,0.8737255366161616,False
+42,2,w/o LSTM Agent,4,0.8720328282828284,False
+42,2,w/o LSTM Agent,5,0.7367424242424243,False
+42,2,w/o Trust Propagation,1,0.8650489267676768,True
+42,2,w/o Trust Propagation,2,0.8264125631313133,False
+42,2,w/o Trust Propagation,3,0.8408577967171716,False
+42,2,w/o Trust Propagation,4,0.8391493055555557,False
+42,2,w/o Symbolic Rules,1,0.8652185921717173,True
+42,2,w/o Symbolic Rules,2,0.833688446969697,False
+42,2,w/o Symbolic Rules,3,0.8406565656565655,False
+42,2,w/o Symbolic Rules,4,0.8569326073232324,False
+42,2,w/o Multi Head Attention,1,0.8568300189393939,True
+42,2,w/o Multi Head Attention,2,0.8453716856060607,False
+42,2,w/o Multi Head Attention,3,0.8398516414141414,False
+42,2,w/o Multi Head Attention,4,0.8428306502525251,False
+42,3,NSNG Energy,1,0.014938537675606647,False
+42,3,NSNG Energy,2,0.011039272030651349,False
+42,3,NSNG Energy,3,0.007618933588761187,False
+42,3,NSNG Energy,4,0.017341155810983416,False
+42,3,NSNG Energy,5,0.8330060664112388,False
+42,3,NSNG Energy,6,0.8860392720306515,False
+42,3,NSNG Energy,7,0.9210967432950192,True
+42,3,NSNG Energy,8,0.9058788314176245,False
+42,3,w/o LSTM Agent,1,0.9922453703703703,True
+42,3,w/o LSTM Agent,2,0.9851313058748403,False
+42,3,w/o LSTM Agent,3,0.8231122286079182,False
+42,3,w/o LSTM Agent,4,0.9770593869731801,False
+42,3,w/o Trust Propagation,1,0.9895035121328226,True
+42,3,w/o Trust Propagation,2,0.984881864623244,False
+42,3,w/o Trust Propagation,3,0.9793143358876117,False
+42,3,w/o Trust Propagation,4,0.9794939335887611,False
+42,3,w/o Symbolic Rules,1,0.9798890485312899,True
+42,3,w/o Symbolic Rules,2,0.9790110153256706,False
+42,3,w/o Symbolic Rules,3,0.9753791507024265,False
+42,3,w/o Symbolic Rules,4,0.9697437739463602,False
+42,3,w/o Multi Head Attention,1,0.009829980842911888,False
+42,3,w/o Multi Head Attention,2,0.009833971902937427,False
+42,3,w/o Multi Head Attention,3,0.012727490421455948,False
+42,3,w/o Multi Head Attention,4,0.018654214559386983,False
+42,3,w/o Multi Head Attention,5,0.5378272669220945,False
+42,3,w/o Multi Head Attention,6,0.8716475095785441,False
+42,3,w/o Multi Head Attention,7,0.8873962324393359,False
+42,3,w/o Multi Head Attention,8,0.9113026819923372,True
+42,4,NSNG Energy,1,0.09299316406250001,False
+42,4,NSNG Energy,2,0.8984266493055556,False
+42,4,NSNG Energy,3,0.903249782986111,True
+42,4,NSNG Energy,4,0.9009440104166667,False
+42,4,NSNG Energy,5,0.9011013454861111,False
+42,4,NSNG Energy,6,0.8987738715277778,False
+42,4,w/o LSTM Agent,1,0.11055772569444444,False
+42,4,w/o LSTM Agent,2,0.09559190538194444,False
+42,4,w/o LSTM Agent,3,0.9096842447916668,True
+42,4,w/o LSTM Agent,4,0.9091905381944444,False
+42,4,w/o LSTM Agent,5,0.9065049913194445,False
+42,4,w/o LSTM Agent,6,0.9080837673611112,False
+42,4,w/o Trust Propagation,1,0.09107530381944444,False
+42,4,w/o Trust Propagation,2,0.09736870659722223,False
+42,4,w/o Trust Propagation,3,0.09703233506944443,False
+42,4,w/o Trust Propagation,4,0.09002821180555556,False
+42,4,w/o Trust Propagation,5,0.09969075520833331,False
+42,4,w/o Trust Propagation,6,0.6513129340277778,False
+42,4,w/o Trust Propagation,7,0.8840983072916666,False
+42,4,w/o Trust Propagation,8,0.8976236979166667,True
+42,4,w/o Symbolic Rules,1,0.09333224826388889,False
+42,4,w/o Symbolic Rules,2,0.9051269531249999,False
+42,4,w/o Symbolic Rules,3,0.9051866319444444,False
+42,4,w/o Symbolic Rules,4,0.9049207899305556,False
+42,4,w/o Symbolic Rules,5,0.9072102864583332,True
+42,4,w/o Symbolic Rules,6,0.8974717881944445,False
+42,4,w/o Symbolic Rules,7,0.9030327690972222,False
+42,4,w/o Symbolic Rules,8,0.9003526475694443,False
+42,4,w/o Multi Head Attention,1,0.09298502604166667,False
+42,4,w/o Multi Head Attention,2,0.8922607421875,False
+42,4,w/o Multi Head Attention,3,0.9032769097222223,True
+42,4,w/o Multi Head Attention,4,0.8988878038194446,False
+42,4,w/o Multi Head Attention,5,0.8961263020833333,False
+42,4,w/o Multi Head Attention,6,0.8982259114583334,False
+42,5,NSNG Energy,1,0.168632819046422,True
+42,5,NSNG Energy,2,0.1603290755404726,False
+42,5,NSNG Energy,3,0.1587030752471929,False
+42,5,NSNG Energy,4,0.15280972431707726,False
+42,5,w/o LSTM Agent,1,0.8339562908496733,False
+42,5,w/o LSTM Agent,2,0.839688599798894,True
+42,5,w/o LSTM Agent,3,0.8348610063683594,False
+42,5,w/o LSTM Agent,4,0.8336200666163902,False
+42,5,w/o LSTM Agent,5,0.8294835134908665,False
+42,5,w/o Trust Propagation,1,0.16774237472766884,False
+42,5,w/o Trust Propagation,2,0.15737441344058992,False
+42,5,w/o Trust Propagation,3,0.14971667085637674,False
+42,5,w/o Trust Propagation,4,0.2830092854449472,False
+42,5,w/o Trust Propagation,5,0.2738831804089157,False
+42,5,w/o Trust Propagation,6,0.34398986090162564,False
+42,5,w/o Trust Propagation,7,0.777623020361991,True
+42,5,w/o Trust Propagation,8,0.7648855161722808,False
+42,5,w/o Symbolic Rules,1,0.16725335700519525,True
+42,5,w/o Symbolic Rules,2,0.1585161094352271,False
+42,5,w/o Symbolic Rules,3,0.15356452677224736,False
+42,5,w/o Symbolic Rules,4,0.1507354250460868,False
+42,5,w/o Multi Head Attention,1,0.15892041645718116,True
+42,5,w/o Multi Head Attention,2,0.1415349526562762,False
+42,5,w/o Multi Head Attention,3,0.13895304382436735,False
+42,5,w/o Multi Head Attention,4,0.14214390082956257,False

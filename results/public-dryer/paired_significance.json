@@ -1,8 +1,0 @@
-{
-  "statistic": "pooled F1 difference",
-  "difference": 0.0023860399782334174,
-  "p_value_two_sided": 0.84375,
-  "acquisition_groups": 6,
-  "permutations": 64,
-  "exact": true
-}

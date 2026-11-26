@@ -18,8 +18,8 @@ from . import paper
 from .agents import Agents, NAMES
 from .artifacts import export_consensus, export_trace, inventory, plot_detection, write_json
 from .data import load_manifest
-from .evaluation import (choose_threshold, classification, counts, paired_group_test, roc_auc, summarize,
-                         threshold_grid)
+from .evaluation import (apply_threshold, best_threshold, classification, counts, paired_group_test, roc_auc,
+                         summarize, threshold_grid)
 from .negotiation import GraphInputs, Negotiator, Settings, graph_inputs
 
 FULL = "NSNG Energy"
@@ -144,12 +144,12 @@ def variants(settings):
             yield axis, str(value), config, ALL_AGENTS
 
 
-def _frame(sequence, fold, scores, confidence, threshold):
+def _frame(sequence, fold, scores, confidence):
+    """Test scores of one sequence; predictions are added once the best grid threshold is known."""
     return pd.DataFrame({
         "sequence": sequence.name, "group": sequence.group, "fault": sequence.fault,
         "fold": fold, "sample": np.arange(len(scores)), "ctime": sequence.time,
         "label": sequence.labels, "score": scores, "confidence": confidence,
-        "prediction": (scores > threshold).astype(int), "threshold": threshold,
     })
 
 
@@ -168,22 +168,13 @@ def _predict(model, batch, config, members, sequences, trace=False):
     return results
 
 
-def _evaluate_graph(model, config, indices, validation, test, inputs, sequences, fold, save_trace, timing):
-    held_out = [*validation, *test]
+def _evaluate_graph(model, config, indices, test, inputs, sequences, fold, save_trace, timing):
+    started = perf_counter()
+    test_results = _predict(model, _batch(inputs, test, indices), config, test, sequences, trace=save_trace)
     if save_trace:
-        validation_results = _predict(model, _batch(inputs, validation, indices), config, validation, sequences)
-        started = perf_counter()
-        test_results = _predict(model, _batch(inputs, test, indices), config, test, sequences, trace=True)
         timing.append((perf_counter() - started, sum(len(sequences[i].labels) for i in test),
                        max(len(sequences[i].labels) for i in test)))
-    else:
-        results = _predict(model, _batch(inputs, held_out, indices), config, held_out, sequences)
-        validation_results, test_results = results[:len(validation)], results[len(validation):]
-    threshold = choose_threshold(
-        np.concatenate([sequences[i].labels for i in validation]),
-        np.concatenate([score for score, _, _ in validation_results]),
-    )
-    frames = [_frame(sequences[i], fold, score, confidence, threshold)
+    frames = [_frame(sequences[i], fold, score, confidence)
               for i, (score, confidence, _) in zip(test, test_results)]
     return frames, {i: detail for i, (_, _, detail) in zip(test, test_results)}
 
@@ -241,13 +232,12 @@ def _run_fold(fold, test, validation, sequences, args, settings, figure_name, de
 
     full = fit(settings, ALL_AGENTS, FULL)
     predictions, details = _evaluate_graph(
-        full, settings, ALL_AGENTS, validation, test, inputs, sequences, fold, studies, negotiation_timing,
+        full, settings, ALL_AGENTS, test, inputs, sequences, fold, studies, negotiation_timing,
     )
     if not studies:
         details = {}
     experiments["method", FULL].extend(predictions)
 
-    validation_labels = np.concatenate([sequences[i].labels for i in validation])
     for name in (*REFERENCE_METHODS, *NAMES):
         agent = NAMES.index(name) if name in NAMES else None
 
@@ -257,15 +247,14 @@ def _run_fold(fold, test, validation, sequences, args, settings, figure_name, de
                 return _score(belief.scores, belief.confidence), belief.confidence.mean(axis=1)
             return belief.scores[:, agent], belief.confidence[:, agent]
 
-        threshold = choose_threshold(validation_labels, np.concatenate([get_scores(i)[0] for i in validation]))
-        experiments["method", name].extend(_frame(sequences[i], fold, *get_scores(i), threshold) for i in test)
+        experiments["method", name].extend(_frame(sequences[i], fold, *get_scores(i)) for i in test)
 
     for study, name, config, indices in (variants(settings) if studies else ()):
         if config == settings and indices == ALL_AGENTS:
             experiments[study, name].extend(predictions)
             continue
         model = fit(config, indices, name) if study == "component" else full
-        result, _ = _evaluate_graph(model, config, indices, validation, test, inputs, sequences, fold, False, [])
+        result, _ = _evaluate_graph(model, config, indices, test, inputs, sequences, fold, False, [])
         experiments[study, name].extend(result)
     print(f"Seed {base_seed} | fold {fold} finished", flush=True)
     return {
@@ -330,18 +319,19 @@ def run(args):
             belief_for_figure = result["belief_for_figure"]
 
     pd.DataFrame(split_rows).to_csv(output / "splits.csv", index=False)
+    # Every threshold-dependent number uses the best grid threshold of its own experiment (Section V.D).
     all_summary, sequence_tables, sweep_rows = [], [], []
-    for (study, name), frames in frames_by_experiment.items():
+    for key, frames in frames_by_experiment.items():
+        frames_by_experiment[key] = frames = apply_threshold(frames, best_threshold(frames))
+        study, name = key
         metrics, per_sequence = summarize(frames)
         all_summary.append({"study": study, "name": name, **metrics})
         sequence_tables.append(per_sequence.assign(study=study, name=name))
         sweep_rows.extend({"study": study, "name": name, **row} for row in threshold_grid(frames))
     pd.concat(sequence_tables, ignore_index=True).to_csv(output / "per_sequence.csv", index=False)
     summary = pd.DataFrame(all_summary)
-    grid = pd.DataFrame(sweep_rows)
-    grid.to_csv(output / "threshold_grid_test.csv", index=False)
-    oracle = _best_grid(grid)
-    oracle.to_csv(output / "best_test_grid.csv", index=False)
+    pd.DataFrame(sweep_rows).to_csv(output / "threshold_grid_test.csv", index=False)
+    summary.drop(columns=["tn", "fp", "fn", "tp"]).to_csv(output / "best_test_grid.csv", index=False)
     full_row = summary.query("study == 'method' and name == @FULL").iloc[0]
     summary.query("study == 'method'").drop(columns="study").to_csv(output / "table_iii_methods.csv", index=False)
     for study, filename in (("rule", "table_iv_rules.csv"), ("component", "table_v_components.csv")):
@@ -363,25 +353,15 @@ def run(args):
     )
     write_json(output / "figure_1_metrics.json", figure_metrics)
     latency = _latency(negotiation_timing, agent_timing, args.jobs)
-    _paper_comparison(output / "paper_comparison.csv", summary, oracle, table, figure_metrics, latency)
+    _paper_comparison(output / "paper_comparison.csv", summary, table, figure_metrics, latency)
     _write_run(output, args, settings, device, table, trace_files, latency)
 
 
-def _best_grid(grid):
-    """Paper protocol (Section V.D): best threshold of the [0.3, 0.7] grid on the test predictions."""
-    keys = [key for key in ("study", "name") if key in grid]
-    distance = (grid["threshold"].mul(100).round() - 45).abs()
-    ranked = grid.assign(_distance=distance).sort_values(
-        ["f1", "_distance", "threshold"], ascending=[False, True, False])
-    ranked = ranked.drop_duplicates(keys) if keys else ranked.head(1)
-    return ranked.drop(columns="_distance")
-
-
-SEED_METRICS = ("accuracy", "precision", "recall", "f1", "roc_auc", "macro_f1", "macro_roc_auc")
+SEED_METRICS = ("threshold", "accuracy", "precision", "recall", "f1", "roc_auc")
 
 
 def _seed_tables(output, by_seed):
-    """Table III repeated over seeds: per-seed metrics, mean, std and a 95% t-interval."""
+    """Table III repeated over seeds (best grid threshold per seed and method): mean, std, 95% t-interval."""
     from scipy import stats
 
     rows, fold_rows = [], []
@@ -392,21 +372,20 @@ def _seed_tables(output, by_seed):
                 if study == "method":
                     frames[name].extend(items)
         for name, items in frames.items():
+            frames[name] = items = apply_threshold(items, best_threshold(items))
             metrics, _ = summarize(items)
-            best = _best_grid(pd.DataFrame(threshold_grid(items))).iloc[0]
-            rows.append({"seed": seed, "name": name, **{key: metrics[key] for key in SEED_METRICS},
-                         "best_grid_f1": best["f1"], "best_grid_threshold": best["threshold"]})
+            rows.append({"seed": seed, "name": name, **{key: metrics[key] for key in SEED_METRICS}})
         for fold, frame in pd.concat(frames[FULL]).groupby("fold"):
             labels = frame["label"].to_numpy()
             f1 = classification(counts(labels, frame["prediction"].to_numpy()))["f1"]
             fold_rows.append({"seed": seed, "fold": fold, "threshold": frame["threshold"].iat[0],
-                              "f1": f1, "roc_auc": roc_auc(frame["label"].to_numpy(), frame["score"].to_numpy()),
+                              "f1": f1, "roc_auc": roc_auc(labels, frame["score"].to_numpy()),
                               "score_min": frame["score"].min(), "score_max": frame["score"].max()})
     per_seed = pd.DataFrame(rows)
     per_seed.to_csv(output / "seeds_table_iii.csv", index=False)
     pd.DataFrame(fold_rows).to_csv(output / "seeds_folds.csv", index=False)
 
-    columns = [*SEED_METRICS, "best_grid_f1"]
+    columns = [metric for metric in SEED_METRICS if metric != "threshold"]
     difference = (per_seed[per_seed["name"] == FULL].set_index("seed")[columns]
                   - per_seed[per_seed["name"] == REFERENCE_METHODS[0]].set_index("seed")[columns])
     groups = [*per_seed.groupby("name", sort=False),
@@ -452,33 +431,29 @@ def _latency(timing, agent_timing, jobs):
     }
 
 
-def _paper_comparison(path, summary, oracle, table, figure_metrics, latency):
-    """Place each published number next to the validation-threshold and best-test-grid results."""
+def _paper_comparison(path, summary, table, figure_metrics, latency):
+    """Place each published number next to the reproduced value (best grid threshold for metrics)."""
     measured = summary.set_index(["study", "name"])
-    best = oracle.set_index(["study", "name"])
     rows = []
 
     def add(section, study, name, values, label=None):
         for metric, published in values.items():
             row = {"section": section, "configuration": label or name, "metric": metric, "paper": published}
             if (study, name) in measured.index:
-                row["reproduced_pooled"] = measured.loc[(study, name), metric]
-                macro = f"macro_{metric}"
-                row["reproduced_macro"] = measured.loc[(study, name), macro] if macro in measured else np.nan
-                row["reproduced_best_test_grid"] = best.loc[(study, name), metric]
+                row["reproduced"] = measured.loc[(study, name), metric]
             rows.append(row)
 
     rows += [
         {"section": "Table I", "configuration": "dataset", "metric": "sequences",
-         "paper": paper.TABLE_I["sequences"], "reproduced_pooled": len(table)},
+         "paper": paper.TABLE_I["sequences"], "reproduced": len(table)},
         {"section": "Table I", "configuration": "dataset", "metric": "average_length",
-         "paper": paper.TABLE_I["average_length"], "reproduced_pooled": table["samples"].mean()},
+         "paper": paper.TABLE_I["average_length"], "reproduced": table["samples"].mean()},
         {"section": "Table I", "configuration": "dataset", "metric": "anomaly_ratio_min",
-         "paper": paper.TABLE_I["anomaly_ratio_min"], "reproduced_pooled": table["anomaly_ratio"].min()},
+         "paper": paper.TABLE_I["anomaly_ratio_min"], "reproduced": table["anomaly_ratio"].min()},
         {"section": "Table I", "configuration": "dataset", "metric": "anomaly_ratio_max",
-         "paper": paper.TABLE_I["anomaly_ratio_max"], "reproduced_pooled": table["anomaly_ratio"].max()},
+         "paper": paper.TABLE_I["anomaly_ratio_max"], "reproduced": table["anomaly_ratio"].max()},
         {"section": "Table I", "configuration": "dataset", "metric": "total_samples",
-         "paper": paper.TABLE_I["total_samples"], "reproduced_pooled": table["samples"].sum()},
+         "paper": paper.TABLE_I["total_samples"], "reproduced": table["samples"].sum()},
     ]
     for name, values in paper.TABLE_III.items():
         add("Table III", "method", name, values)
@@ -489,10 +464,10 @@ def _paper_comparison(path, summary, oracle, table, figure_metrics, latency):
     for (axis, value), values in paper.SENSITIVITY.items():
         add("Section V.I", axis, value, values, f"{axis}={value}")
     rows += [{"section": "Figure 1", "configuration": "first 1,000 samples at 0.45", "metric": metric,
-              "paper": published, "reproduced_pooled": figure_metrics[metric]}
+              "paper": published, "reproduced": figure_metrics[metric]}
              for metric, published in paper.FIGURE_1.items() if metric not in ("threshold", "samples")]
     rows.append({"section": "Table VI", "configuration": FULL, "metric": "ms_per_sample",
-                 "paper": paper.LATENCY_MS_PER_SAMPLE, "reproduced_pooled": latency["end_to_end_ms_per_sample"]})
+                 "paper": paper.LATENCY_MS_PER_SAMPLE, "reproduced": latency["end_to_end_ms_per_sample"]})
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
@@ -501,7 +476,7 @@ def _write_run(output, args, settings, device, table, traces, latency):
     run_parameters = {key: str(value) if isinstance(value, Path) else value
                       for key, value in vars(args).items() if key != "command"}
     write_json(output / "run.json", {
-        "protocol": "grouped out-of-fold test with disjoint validation for threshold selection",
+        "protocol": "grouped out-of-fold test; validation fold for early stopping; best F1 threshold of the [0.3, 0.7] grid on the test predictions (Section V.D)",
         "parameters": run_parameters, "negotiation": asdict(settings),
         "device": ([torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
                    if device.type == "cuda" else "CPU"),

@@ -16,7 +16,9 @@ Anomaly detection on dryer power consumption using multiple detector agents comb
 | Tracing | JSON, gzipped JSONL, compressed NPZ | `run.json`, consensus knowledge graph, per-round traces |
 | Testing | `unittest` | Tests for the negotiation module |
 
-**How it works:** 7 detector agents produce a score and a confidence for each observation. The agents are connected as a graph, and a GAT runs several rounds so they can exchange beliefs. After each round, symbolic rules R1–R4 adjust confidence and trust, and trust is carried over to the next observation. The final consensus score is compared against a threshold selected on the validation set.
+**How it works:** 7 detector agents produce a score and a confidence for each observation. The agents are connected as a graph, and a GAT runs several rounds so they can exchange beliefs. After each round, symbolic rules R1–R4 adjust confidence and trust, and trust is carried over to the next observation. The final consensus score is compared against a decision threshold.
+
+**Evaluation protocol:** grouped 5-fold cross-validation; the next fold serves as validation for early stopping of the GAT. As in Section V.D of the paper, every threshold-dependent metric uses the threshold with the best F1 among 0.30, 0.35, …, 0.70 on the test predictions, chosen separately for each method, ablation and sensitivity setting.
 
 ## Installation and usage
 
@@ -69,7 +71,7 @@ The manifest CSV has columns `sequence,path,group`, with optional `fault,normal_
 | [`agents.py`](nsng_energy/agents.py) | 7 detector agents (Isolation Forest ×2, One-Class SVM ×2, LOF, LSTM autoencoder, Adaptive Z-Score); maps raw scores to score and confidence |
 | [`negotiation.py`](nsng_energy/negotiation.py) | Negotiation graph: edge construction, multi-round GAT, symbolic rules R1–R4, trust updates over time, consensus |
 | [`experiment.py`](nsng_energy/experiment.py) | Main pipeline: group-based folds, agent and negotiator training, baselines, ablation, sensitivity, inference timing |
-| [`evaluation.py`](nsng_energy/evaluation.py) | Validation threshold selection, metrics, paired permutation test |
+| [`evaluation.py`](nsng_energy/evaluation.py) | Best grid threshold, metrics, paired permutation test |
 | [`artifacts.py`](nsng_energy/artifacts.py) | Exports the dataset table, Figure 1, consensus knowledge graph, and traces |
 | [`paper.py`](nsng_energy/paper.py) | Reference numbers used in the comparison table |
 | [`tests/`](tests/test_negotiation.py) | Unit tests for consensus, edge matrix, and trust | -->
@@ -83,14 +85,15 @@ Written to `results/public-dryer/` by default:
 | `table_i_dataset.csv`, `splits.csv` | Sequence list and fold splits |
 | `table_iii_methods.csv`, `per_sequence.csv` | Metrics for NSNG-Energy, baselines, and each agent |
 | `table_iv_rules.csv`, `table_v_components.csv` | Rule and component ablations |
-| `sensitivity.csv`, `threshold_grid_test.csv`, `best_test_grid.csv` | Hyperparameter and threshold sweeps |
+| `sensitivity.csv` | Hyperparameter sweeps (rounds, momentum, symbolic strength) |
+| `best_test_grid.csv`, `threshold_grid_test.csv` | Chosen threshold and metrics for every experiment; metrics at each grid threshold |
 | `figure_1.png`, `figure_1_metrics.json` | Plot of power, labels, agent scores, consensus |
-| `paired_significance.json` | Statistical tests |
+| `paired_significance.json` | Paired permutation test, NSNG-Energy vs Smart Ensemble |
 | `paper_comparison.csv`, `table_vi_qualitative.csv` | Comparison against reference numbers |
 | `run.json` | Parameters, library versions, data source, inference time |
 | `training_history.csv` | Validation ROC-AUC per GAT epoch and the selected epoch |
 | `seeds_table_iii.csv`, `seeds_summary.csv`, `seeds_folds.csv` | Table III per seed; mean, std, 95% CI; NSNG per-fold F1, AUC, score range |
-| `predictions.csv.gz` | Per-observation predictions |
+| `predictions.csv.gz` | Per-observation NSNG-Energy score and prediction |
 | `consensus_kg.jsonl.gz` | Per observation: score, confidence, prediction, rounds, conflict counts, final trust |
 
 

@@ -9,7 +9,9 @@
     "threads": 1,
     "window": 24,
     "lstm_epochs": 8,
-    "graph_epochs": 4,
+    "graph_epochs": 8,
+    "patience": 3,
+    "extra_seeds": [],
     "chunk_size": 32,
     "jobs": 5,
     "detector_residual": 0.0,
@@ -63,22 +65,22 @@
   },
   "full_model_rule_applications": {
     "R1": 0,
-    "R2": 19861,
-    "R3": 6949,
-    "R4": 20437
+    "R2": 4730,
+    "R3": 7797,
+    "R4": 33416
   },
   "full_model_conflicts": {
     "initial_conflicts": 152440,
-    "final_conflicts": 2955,
+    "final_conflicts": 24825,
     "initial_direct_conflicts": 78019,
     "final_direct_conflicts": 0
   },
   "latency": {
     "scope": "test sequences of each fold negotiated together as one padded batch, excluding fitting and artifact export",
     "parallel_fold_workers": 5,
-    "negotiation_ms_per_sample": 11.271032375156398,
-    "negotiation_ms_per_time_step": 33.695659171253034,
-    "agent_scoring_and_graph_input_ms_per_sample": 0.3257262496425353,
-    "end_to_end_ms_per_sample": 11.596758624798934
+    "negotiation_ms_per_sample": 13.267530661349433,
+    "negotiation_ms_per_time_step": 39.66435161648415,
+    "agent_scoring_and_graph_input_ms_per_sample": 0.3359446528596945,
+    "end_to_end_ms_per_sample": 13.603475314209128
   }
 }
