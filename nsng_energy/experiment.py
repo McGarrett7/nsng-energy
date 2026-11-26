@@ -374,6 +374,7 @@ def run(args):
     figure = next(sequence for sequence in sequences if sequence.name == figure_name)
     figure_metrics = plot_detection(
         output / "figure_1.png", figure, full_scores[full_scores["sequence"] == figure_name], belief_for_figure,
+        float(full_row["threshold"]),
     )
     write_json(output / "figure_1_metrics.json", figure_metrics)
     latency = _latency(negotiation_timing, agent_timing, args.jobs)
@@ -487,7 +488,8 @@ def _paper_comparison(path, summary, table, figure_metrics, latency):
         add("Table V", "method" if name == FULL else "component", name, values)
     for (axis, value), values in paper.SENSITIVITY.items():
         add("Section V.I", axis, value, values, f"{axis}={value}")
-    rows += [{"section": "Figure 1", "configuration": "first 1,000 samples at 0.45", "metric": metric,
+    rows += [{"section": "Figure 1", "configuration": f"first 1,000 samples (paper at 0.45, reproduced at "
+                                                        f"{figure_metrics['threshold']:.2f})", "metric": metric,
               "paper": published, "reproduced": figure_metrics[metric]}
              for metric, published in paper.FIGURE_1.items() if metric not in ("threshold", "samples")]
     rows.append({"section": "Table VI", "configuration": FULL, "metric": "ms_per_sample",

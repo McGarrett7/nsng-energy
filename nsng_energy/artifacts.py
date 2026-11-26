@@ -85,44 +85,73 @@ def export_consensus(path: Path, sequences, full, trace_files) -> None:
                 })
 
 
-def plot_detection(path: Path, sequence: Sequence, frame: pd.DataFrame, beliefs: np.ndarray) -> dict:
+def _anomaly_spans(labels: np.ndarray) -> list[tuple[int, int]]:
+    edges = np.flatnonzero(np.diff(np.r_[0, labels.astype(int), 0]))
+    return list(zip(edges[::2], edges[1::2]))
+
+
+def plot_detection(path: Path, sequence: Sequence, frame: pd.DataFrame, beliefs: np.ndarray,
+                   threshold: float) -> dict:
+    """Figure 1 on the first 1,000 samples, at the best grid threshold used for every reported metric."""
     limit = min(1000, len(sequence.power))
     x = np.arange(limit)
-    threshold = 0.45
     labels = sequence.labels[:limit]
     scores = frame["score"].to_numpy()[:limit]
     predicted = scores > threshold
     confusion = counts(labels, predicted)
     metrics = classification(confusion)
-    figure, axes = plt.subplots(4, 1, figsize=(11, 10), layout="constrained")
+
+    figure = plt.figure(figsize=(12, 11), layout="constrained")
+    grid = figure.add_gridspec(4, 2, height_ratios=[1, 1, 1, 1.05], width_ratios=[1, 1])
+    axes = [figure.add_subplot(grid[row, :]) for row in range(3)]
+    matrix_axis, text_axis = figure.add_subplot(grid[3, 0]), figure.add_subplot(grid[3, 1])
+    spans = _anomaly_spans(labels)
+
     axes[0].plot(x, sequence.power[:limit], c="#2455a5", lw=1.0, label="Power")
     anomaly = labels == 1
     axes[0].scatter(x[anomaly], sequence.power[:limit][anomaly], s=13, c="#bb3437", label="Labeled anomaly")
     axes[0].set(title=f"(a) {sequence.name} · {sequence.fault.replace('_', ' ')}", ylabel="Power (W)")
-    axes[0].legend(loc="upper right")
+    axes[0].legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9)
     for name, agent in zip(NAMES, beliefs[:limit].T):
         axes[1].plot(x, agent, lw=0.9, alpha=0.8, label=name)
     axes[1].set(title="(b) Individual agents", ylabel="Anomaly score")
-    axes[1].legend(ncol=4, loc="upper right", fontsize=8)
+    axes[1].legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9)
     axes[2].plot(x, scores, c="#207856", lw=1.25, label="NSNG-Energy")
-    axes[2].axhline(threshold, c="#b66c14", linestyle="--", label="Threshold 0.45")
-    axes[2].fill_between(x, threshold, scores, where=predicted, color="#65a991", alpha=0.3)
+    axes[2].axhline(threshold, c="#b66c14", linestyle="--", label=f"Threshold {threshold:.2f}")
+    axes[2].fill_between(x, threshold, scores, where=predicted, color="#65a991", alpha=0.35,
+                         label="Detected")
     axes[2].set(title="(c) Consensus detection", ylabel="Anomaly score", xlabel="Observation index")
-    axes[2].legend(loc="upper right")
-    for ax in axes[:3]:
+    for ax in axes[1:]:
+        for first, last in spans:
+            ax.axvspan(first - 0.5, last - 0.5, color="#bb3437", alpha=0.12, lw=0)
+    axes[2].axvspan(np.nan, np.nan, color="#bb3437", alpha=0.12, lw=0, label="Labeled anomaly")
+    axes[2].legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9)
+    for ax in axes:
         ax.set_xlim(x[0], max(x[-1], 1))
         ax.grid(alpha=0.2)
     axes[1].set_ylim(-0.02, 1.02)
     axes[2].set_ylim(-0.02, 1.02)
+
     matrix = confusion.reshape(2, 2)
-    image = axes[3].imshow(matrix, cmap="Blues", vmin=0)
+    image = matrix_axis.imshow(matrix, cmap="Blues", vmin=0)
     for i, j in np.ndindex(matrix.shape):
         color = "white" if matrix[i, j] > matrix.max() / 2 else "#202830"
-        axes[3].text(j, i, f"{matrix[i, j]:,}", ha="center", va="center", color=color)
-    axes[3].set(xticks=[0, 1], yticks=[0, 1], xticklabels=["Normal", "Anomaly"],
-                yticklabels=["Normal", "Anomaly"], xlabel="Predicted", ylabel="Labeled",
-                title=f"(d) Accuracy {metrics['accuracy']:.3f} · F1 {metrics['f1']:.3f}")
-    figure.colorbar(image, ax=axes[3], shrink=0.75, label="Observations")
+        matrix_axis.text(j, i, f"{matrix[i, j]:,}", ha="center", va="center", color=color, fontsize=12)
+    matrix_axis.set(xticks=[0, 1], yticks=[0, 1], xticklabels=["Normal", "Anomaly"],
+                    yticklabels=["Normal", "Anomaly"], xlabel="Predicted", ylabel="Labeled",
+                    title="(d) Confusion matrix")
+    figure.colorbar(image, ax=matrix_axis, shrink=0.8, label="Observations")
+    text_axis.axis("off")
+    rows = [("Samples", f"{limit:,}"), ("Threshold", f"{threshold:.2f}"),
+            ("Accuracy", f"{metrics['accuracy']:.3f}"), ("Precision", f"{metrics['precision']:.3f}"),
+            ("Recall", f"{metrics['recall']:.3f}"), ("F1", f"{metrics['f1']:.3f}"),
+            ("False positive rate", f"{metrics['false_positive_rate']:.3f}")]
+    table = text_axis.table(cellText=[[value] for _, value in rows], rowLabels=[name for name, _ in rows],
+                            colWidths=[0.35], loc="center")
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1, 1.6)
+    text_axis.set_title("(e) Metrics on these samples")
     figure.savefig(path, dpi=155)
     plt.close(figure)
     return {

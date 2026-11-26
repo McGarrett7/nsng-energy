@@ -49,10 +49,10 @@ Table V,w/o Multi Head Attention,f1,0.2218,0.264920674892974
 Table V,w/o Multi Head Attention,roc_auc,0.7756,0.8270685541310542
 Section V.I,rounds=5,f1,0.182,0.2622504537205081
 Section V.I,rounds=12,f1,0.238,0.2638064810588772
-Figure 1,"first 1,000 samples at 0.45",tn,775.0,933.0
-Figure 1,"first 1,000 samples at 0.45",fp,158.0,0.0
-Figure 1,"first 1,000 samples at 0.45",fn,67.0,67.0
-Figure 1,"first 1,000 samples at 0.45",tp,0.0,0.0
-Figure 1,"first 1,000 samples at 0.45",accuracy,0.811,0.933
-Figure 1,"first 1,000 samples at 0.45",f1,0.238,0.0
+Figure 1,"first 1,000 samples (paper at 0.45, reproduced at 0.35)",tn,775.0,553.0
+Figure 1,"first 1,000 samples (paper at 0.45, reproduced at 0.35)",fp,158.0,380.0
+Figure 1,"first 1,000 samples (paper at 0.45, reproduced at 0.35)",fn,67.0,15.0
+Figure 1,"first 1,000 samples (paper at 0.45, reproduced at 0.35)",tp,0.0,52.0
+Figure 1,"first 1,000 samples (paper at 0.45, reproduced at 0.35)",accuracy,0.811,0.605
+Figure 1,"first 1,000 samples (paper at 0.45, reproduced at 0.35)",f1,0.238,0.20841683366733466
 Table VI,NSNG Energy,ms_per_sample,0.5,13.603475314209128
