@@ -31,6 +31,8 @@ def main() -> None:
                      help="Maximum epochs for the graph; the epoch with the best validation ROC-AUC is kept.")
     run.add_argument("--patience", type=positive_int, default=3,
                      help="Stop fitting the graph after this many epochs without validation ROC-AUC gain.")
+    run.add_argument("--restarts", type=positive_int, default=3,
+                     help="Re-initialise the graph (up to this many fits) while its best validation ROC-AUC is below 0.5.")
     run.add_argument("--extra-seeds", type=int, nargs="*", default=[],
                      help="Repeat Table III (main model, baselines, agents) with these seeds for mean/std/95%% CI.")
     run.add_argument("--chunk-size", type=positive_int, default=32,

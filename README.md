@@ -49,6 +49,7 @@ Run tests:
 | `run --manifest <csv> --output <dir>` | Use your own data |
 | `run --seed`, `--window`, `--lstm-epochs`, `--graph-epochs`, `--chunk-size` | Seed (42), window (24), LSTM epochs (8), maximum GAT epochs (8), truncated BPTT length (32) |
 | `run --patience N` | Early stopping: keep the GAT epoch with the best validation ROC-AUC, stop after N epochs without gain (3) |
+| `run --restarts N` | Re-initialise the GAT (up to N fits, default 3) while its best validation ROC-AUC is below 0.5; the best fit on validation is kept |
 | `run --extra-seeds 43 44 …` | Repeat Table III with these seeds; writes mean, std and 95% CI |
 | `run --nominal-voltage <V>` `--voltage-rule soft\|hard` | Enable voltage rule R1 when the data has a `voltage` column |
 | `run --detector-residual w` | Add `w·logit` of the initial detector score to the prediction layer |
@@ -91,7 +92,7 @@ Written to `results/public-dryer/` by default:
 | `paired_significance.json` | Paired permutation test, NSNG-Energy vs Smart Ensemble |
 | `paper_comparison.csv`, `table_vi_qualitative.csv` | Comparison against reference numbers |
 | `run.json` | Parameters, library versions, data source, inference time |
-| `training_history.csv` | Validation ROC-AUC per GAT epoch and the selected epoch |
+| `training_history.csv` | Validation ROC-AUC per GAT restart and epoch, and the selected one |
 | `seeds_table_iii.csv`, `seeds_summary.csv`, `seeds_folds.csv` | Table III per seed; mean, std, 95% CI; NSNG per-fold F1, AUC, score range |
 | `predictions.csv.gz` | Per-observation NSNG-Energy score and prediction |
 | `consensus_kg.jsonl.gz` | Per observation: score, confidence, prediction, rounds, conflict counts, final trust |

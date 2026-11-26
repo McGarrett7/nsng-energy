@@ -61,6 +61,27 @@ def _validation_auc(model, batch, labels):
 
 
 def _fit_negotiator(settings, indices, training, validation, sequences, inputs, args, seed, shuffle=True):
+    """Fit the graph, re-initialising it while the best validation ROC-AUC stays below 0.5.
+
+    A run whose consensus ranks validation anomalies below normal observations is stuck in a
+    degenerate solution (near-constant, inverted scores). Up to ``args.restarts`` fresh
+    initialisations are tried and the one with the highest validation ROC-AUC is kept; the test
+    data are never consulted. Returns the model and the per-epoch validation AUC of every attempt.
+    """
+    best_model, best_auc, attempts = None, -np.inf, []
+    for attempt in range(args.restarts):
+        model, history = _fit_once(settings, indices, training, validation, sequences, inputs, args,
+                                   seed + 1000 * attempt, shuffle)
+        attempts.append(history)
+        auc = np.nanmax(history) if np.isfinite(history).any() else -np.inf
+        if best_model is None or auc > best_auc:
+            best_model, best_auc, chosen = model, auc, attempt
+        if best_auc >= 0.5:
+            break
+    return best_model, attempts, chosen
+
+
+def _fit_once(settings, indices, training, validation, sequences, inputs, args, seed, shuffle=True):
     """Truncated backpropagation through time over the training sequences in parallel.
 
     With ``shuffle`` the chunks of an epoch are visited in random order. Each chunk starts
@@ -221,13 +242,16 @@ def _run_fold(fold, test, validation, sequences, args, settings, figure_name, de
     negotiation_timing, history_rows = [], []
 
     def fit(config, indices, name):
-        model, history = _fit_negotiator(config, indices, training, validation, sequences, inputs, args, seed)
-        best = int(np.nanargmax(history)) if np.isfinite(history).any() else len(history) - 1
-        history_rows.extend({"seed": base_seed, "fold": fold, "model": name, "epoch": epoch + 1,
-                             "validation_roc_auc": auc, "selected": epoch == best}
-                            for epoch, auc in enumerate(history))
-        print(f"  seed {base_seed} | fold {fold} | {name} | validation AUC per epoch "
-              f"{[round(auc, 3) for auc in history]} -> epoch {best + 1}", flush=True)
+        model, attempts, chosen = _fit_negotiator(config, indices, training, validation, sequences, inputs, args, seed)
+        for attempt, history in enumerate(attempts):
+            best = int(np.nanargmax(history)) if np.isfinite(history).any() else len(history) - 1
+            history_rows.extend({"seed": base_seed, "fold": fold, "model": name, "restart": attempt,
+                                 "epoch": epoch + 1, "validation_roc_auc": auc,
+                                 "selected": attempt == chosen and epoch == best}
+                                for epoch, auc in enumerate(history))
+            print(f"  seed {base_seed} | fold {fold} | {name} | restart {attempt} | validation AUC per epoch "
+                  f"{[round(auc, 3) for auc in history]} -> epoch {best + 1}"
+                  f"{' (kept)' if attempt == chosen else ''}", flush=True)
         return model
 
     full = fit(settings, ALL_AGENTS, FULL)
